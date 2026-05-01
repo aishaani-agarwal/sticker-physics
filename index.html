@@ -6,9 +6,71 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
   <video id="video" autoplay playsinline muted></video>
   <canvas id="cv-canvas"></canvas>
   <canvas id="main-canvas"></canvas>
+
+  <!-- SIDE PANEL -->
+  <div id="panel">
+    <div class="panel-section">
+      <div class="section-title">CONTROLS</div>
+      <button onclick="showWebcam = !showWebcam">Toggle Camera</button>
+      <button onclick="balls.forEach(b=>World.remove(world,b)); balls=[];">Clear Balls</button>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">CAMERA OPACITY</div>
+      <input type="range" min="0" max="1" step="0.01" value="1"
+        oninput="webcamOpacity = +this.value; this.nextElementSibling.textContent = Math.round(this.value*100)+'%'">
+      <span>100%</span>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">COLOR DETECTION</div>
+      <label>Hue Min</label>
+      <input type="range" min="0" max="180" value="90"
+        oninput="HSV.hmin=+this.value; this.nextElementSibling.textContent=this.value">
+      <span>90</span>
+
+      <label>Hue Max</label>
+      <input type="range" min="0" max="180" value="130"
+        oninput="HSV.hmax=+this.value; this.nextElementSibling.textContent=this.value">
+      <span>130</span>
+
+      <label>Sat Min</label>
+      <input type="range" min="0" max="255" value="80"
+        oninput="HSV.smin=+this.value; this.nextElementSibling.textContent=this.value">
+      <span>80</span>
+
+      <label>Val Min</label>
+      <input type="range" min="0" max="255" value="80"
+        oninput="HSV.vmin=+this.value; this.nextElementSibling.textContent=this.value">
+      <span>80</span>
+
+      <label>Min Area</label>
+      <input type="range" min="100" max="10000" step="100" value="3000"
+        oninput="HSV.minArea=+this.value; this.nextElementSibling.textContent=this.value">
+      <span>3000</span>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">PHYSICS</div>
+      <label>Gravity</label>
+      <input type="range" min="0" max="5" step="0.1" value="1.5"
+        oninput="engine.gravity.y=+this.value; this.nextElementSibling.textContent=this.value">
+      <span>1.5</span>
+
+      <label>Bounce</label>
+      <input type="range" min="0" max="1" step="0.05" value="0.6"
+        oninput="balls.forEach(b=>b.restitution=+this.value); this.nextElementSibling.textContent=this.value">
+      <span>0.6</span>
+    </div>
+  </div>
+
+  <!-- ARROW TOGGLE BUTTON -->
+  <div id="panel-toggle" onclick="togglePanel()">❯</div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()"></script>
   <script src="sketch.js"></script>

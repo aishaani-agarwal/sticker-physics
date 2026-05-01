@@ -12,20 +12,21 @@ window.addEventListener('resize', () => {
   initWalls();
 });
 
-// HSV threshold for yellow
-let HSV = { hmin: 15, hmax: 35, smin: 120, vmin: 100, minArea: 3000 };
-
+// ── Settings ─────────────────────────────────
+let showWebcam  = true;
+let webcamOpacity = 1.0;
+let HSV = { hmin: 100, hmax: 130, smin: 120, vmin: 80, minArea: 3000 };
 let blobs = [];
 
 // ── Smoothing ────────────────────────────────
 let trackedBlobs = [];
-const LERP = 0.12; // very smooth, low = stable
+const LERP = 0.12;
 
 function smoothBlobs(freshBlobs) {
   const out = [];
   freshBlobs.forEach(nb => {
     let best = null, bestDist = Infinity;
-    trackedBlobs.forEach((tb) => {
+    trackedBlobs.forEach(tb => {
       const d = (tb.cx - nb.cx) ** 2 + (tb.cy - nb.cy) ** 2;
       if (d < bestDist) { bestDist = d; best = tb; }
     });
@@ -75,8 +76,7 @@ function detectColor() {
   const lo = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [HSV.hmin, HSV.smin, HSV.vmin, 0]);
   const hi = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [HSV.hmax, 255, 255, 255]);
   cv.inRange(hsv, lo, hi, mask);
-
-  cv.erode (mask, mask, kernel);
+  cv.erode(mask, mask, kernel);
   cv.dilate(mask, mask, kernel);
 
   const contours  = new cv.MatVector();
@@ -102,20 +102,15 @@ function detectColor() {
 
   blobs = smoothBlobs(freshBlobs);
   updateStickerBodies();
-
   lo.delete(); hi.delete(); contours.delete(); hierarchy.delete();
 }
 
 // ── Matter.js ────────────────────────────────
 const { Engine, Runner, Bodies, Body, World } = Matter;
-
 const engine = Engine.create({ gravity: { x: 0, y: 1.5 } });
 const world  = engine.world;
 
-let walls         = [];
-let stickerBodies = [];
-let balls         = [];
-
+let walls = [], stickerBodies = [], balls = [];
 const BALL_RADIUS = 12;
 
 function initWalls() {
@@ -133,7 +128,6 @@ function updateStickerBodies() {
   stickerBodies.forEach(b => World.remove(world, b));
   stickerBodies = [];
 
-  // same scale as render so boxes align perfectly
   const scale   = Math.min(W / cvCvs.width, H / cvCvs.height);
   const offsetX = (W - cvCvs.width  * scale) / 2;
   const offsetY = (H - cvCvs.height * scale) / 2;
@@ -145,13 +139,9 @@ function updateStickerBodies() {
     const bh = Math.max(blob.h * scale, 16);
 
     const body = Bodies.rectangle(cx, cy, bw, bh, {
-      isStatic:    true,
-      label:       'sticker',
-      angle:       -blob.angle,
-      restitution: 0.5,
-      friction:    0.3,
+      isStatic: true, label: 'sticker',
+      angle: -blob.angle, restitution: 0.5, friction: 0.3,
     });
-
     World.add(world, body);
     stickerBodies.push(body);
   });
@@ -160,45 +150,47 @@ function updateStickerBodies() {
 function spawnBall() {
   const x = BALL_RADIUS * 2 + Math.random() * (W - BALL_RADIUS * 4);
   const b = Bodies.circle(x, -BALL_RADIUS * 2, BALL_RADIUS, {
-    restitution: 0.6,
-    friction:    0.05,
-    frictionAir: 0.006,
-    label:       'ball',
+    restitution: 0.6, friction: 0.05, frictionAir: 0.006, label: 'ball',
   });
   Body.setVelocity(b, { x: (Math.random() - 0.5) * 2, y: 1 });
   World.add(world, b);
   balls.push(b);
-
-  // cleanup balls off screen
   balls = balls.filter(b => {
     if (b.position.y > H + 100) { World.remove(world, b); return false; }
     return true;
   });
-
   if (balls.length > 80) World.remove(world, balls.shift());
 }
 
 setInterval(spawnBall, 500);
-setInterval(detectColor, 50); // 20fps detection, saves CPU
+setInterval(detectColor, 50);
 Runner.run(Runner.create(), engine);
+
+// ── Panel Toggle ─────────────────────────────
+function togglePanel() {
+  const panel  = document.getElementById('panel');
+  const toggle = document.getElementById('panel-toggle');
+  panel.classList.toggle('hidden');
+  toggle.classList.toggle('hidden');
+  toggle.textContent = panel.classList.contains('hidden') ? '❮' : '❯';
+}
+
 
 // ── Webcam ───────────────────────────────────
 async function startWebcam() {
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {
-      width:      { ideal: 1280 },
-      height:     { ideal: 720  },
-      aspectRatio: { ideal: 16/9 }, // force horizontal
-      facingMode: 'user'
+      width:       { ideal: 1280 },
+      height:      { ideal: 720  },
+      aspectRatio: { ideal: 16/9 },
+      facingMode:  'user'
     }
   });
   video.srcObject = stream;
   video.play();
-
   video.addEventListener('canplay', () => {
     cvCvs.width  = video.videoWidth;
     cvCvs.height = video.videoHeight;
-    console.log('video ready:', video.videoWidth, video.videoHeight);
     initOpenCV();
     initWalls();
     render();
@@ -210,27 +202,30 @@ function render() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
 
-  // fit webcam naturally, centered, no zoom, no crop, no stretch
-  const scale   = Math.min(W / video.videoWidth, H / video.videoHeight);
-  const offsetX = (W - video.videoWidth  * scale) / 2;
-  const offsetY = (H - video.videoHeight * scale) / 2;
+  // webcam feed (toggleable opacity)
+  if (showWebcam && webcamOpacity > 0) {
+    const scale   = Math.min(W / video.videoWidth, H / video.videoHeight);
+    const offsetX = (W - video.videoWidth  * scale) / 2;
+    const offsetY = (H - video.videoHeight * scale) / 2;
+    ctx.save();
+    ctx.globalAlpha = webcamOpacity;
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, offsetX, offsetY, video.videoWidth * scale, video.videoHeight * scale);
+    ctx.restore();
+  }
 
-  // draw mirrored webcam
-  ctx.save();
-  ctx.translate(W, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, offsetX, offsetY, video.videoWidth * scale, video.videoHeight * scale);
-  ctx.restore();
-
-  // draw sticker collision outlines
+  // draw sticker boxes — filled grey + white outline
   stickerBodies.forEach(b => {
     const v = b.vertices;
     ctx.beginPath();
     ctx.moveTo(v[0].x, v[0].y);
     for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
     ctx.closePath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = 2;
+    ctx.fillStyle   = 'rgba(180, 180, 180, 0.5)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth   = 2;
+    ctx.fill();
     ctx.stroke();
   });
 
@@ -246,13 +241,7 @@ function render() {
   requestAnimationFrame(render);
 }
 
-// ── Fullscreen on click ───────────────────────
-document.addEventListener('click', () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen();
-  }
-});
-
+// ── Fullscreen ───────────────────────────────
 document.addEventListener('fullscreenchange', () => {
   W = mainCvs.width  = window.innerWidth;
   H = mainCvs.height = window.innerHeight;
