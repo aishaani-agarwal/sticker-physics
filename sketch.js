@@ -9,18 +9,37 @@ let H = mainCvs.height = window.innerHeight;
 window.addEventListener('resize', () => {
   W = mainCvs.width  = window.innerWidth;
   H = mainCvs.height = window.innerHeight;
+  updateCamTransform();
   initWalls();
 });
 
 // ── Settings ─────────────────────────────────
-let showWebcam  = true;
+let showWebcam    = true;
 let webcamOpacity = 1.0;
-let HSV = { hmin: 100, hmax: 130, smin: 120, vmin: 80, minArea: 3000 };
+let boxOpacity    = 0.45;
+let HSV = { hmin: 90, hmax: 130, smin: 30, vmin: 50, minArea: 500 };
 let blobs = [];
+
+// camera transform — maps webcam pixels to screen pixels
+let camScale = 1, camOffsetX = 0, camOffsetY = 0;
+
+function updateCamTransform() {
+  camScale   = Math.min(W / video.videoWidth, H / video.videoHeight);
+  camOffsetX = (W - video.videoWidth  * camScale) / 2;
+  camOffsetY = (H - video.videoHeight * camScale) / 2;
+}
+
+// convert webcam pixel → screen pixel (no mirroring)
+function camToScreen(cx, cy) {
+  return {
+    x: cx * camScale + camOffsetX,
+    y: cy * camScale + camOffsetY,
+  };
+}
 
 // ── Smoothing ────────────────────────────────
 let trackedBlobs = [];
-const LERP = 0.12;
+const LERP = 0.15;
 
 function smoothBlobs(freshBlobs) {
   const out = [];
@@ -47,12 +66,24 @@ function smoothBlobs(freshBlobs) {
 }
 
 // ── OpenCV ───────────────────────────────────
-let cvReady = false;
+let cvReady  = false;
+let camReady = false;
 let src, hsv, mask, kernel, cvInitialized = false;
 
+// called by opencv.js onload
 function onOpenCvReady() {
   cvReady = true;
   console.log('OpenCV ready!');
+  tryStartDetection();
+}
+
+function tryStartDetection() {
+  if (cvReady && camReady) {
+    initOpenCV();
+    setInterval(detectColor, 50);
+    setInterval(rebuildStickerBodies, 300);
+    console.log('Detection started!');
+  }
 }
 
 function initOpenCV() {
@@ -64,9 +95,9 @@ function initOpenCV() {
 }
 
 function detectColor() {
-  if (!cvReady || !cvInitialized) return;
+  if (!cvInitialized) return;
 
-  const ctx2d = cvCvs.getContext('2d');
+  const ctx2d = cvCvs.getContext('2d', { willReadFrequently: true });
   ctx2d.drawImage(video, 0, 0, cvCvs.width, cvCvs.height);
   src.data.set(ctx2d.getImageData(0, 0, cvCvs.width, cvCvs.height).data);
 
@@ -94,14 +125,13 @@ function detectColor() {
         cy:    rect.center.y,
         w:     Math.max(rect.size.width, rect.size.height),
         h:     Math.min(rect.size.width, rect.size.height),
-        angle: rect.angle * (Math.PI / 180),
+        angle: rect.angle * Math.PI / 180,
       });
     }
     cnt.delete();
   }
 
   blobs = smoothBlobs(freshBlobs);
-  updateStickerBodies();
   lo.delete(); hi.delete(); contours.delete(); hierarchy.delete();
 }
 
@@ -124,23 +154,21 @@ function initWalls() {
   World.add(world, walls);
 }
 
-function updateStickerBodies() {
+function rebuildStickerBodies() {
   stickerBodies.forEach(b => World.remove(world, b));
   stickerBodies = [];
 
-  const scale   = Math.min(W / cvCvs.width, H / cvCvs.height);
-  const offsetX = (W - cvCvs.width  * scale) / 2;
-  const offsetY = (H - cvCvs.height * scale) / 2;
-
   blobs.forEach(blob => {
-    const cx = W - (blob.cx * scale + offsetX);
-    const cy = blob.cy * scale + offsetY;
-    const bw = blob.w * scale;
-    const bh = Math.max(blob.h * scale, 16);
+    const pos = camToScreen(blob.cx, blob.cy);
+    const bw  = blob.w * camScale;
+    const bh  = Math.max(blob.h * camScale, 20);
 
-    const body = Bodies.rectangle(cx, cy, bw, bh, {
-      isStatic: true, label: 'sticker',
-      angle: -blob.angle, restitution: 0.5, friction: 0.3,
+    const body = Bodies.rectangle(pos.x, pos.y, bw, bh, {
+      isStatic:    true,
+      label:       'sticker',
+      angle:       blob.angle,
+      restitution: 0.6,
+      friction:    0.5,
     });
     World.add(world, body);
     stickerBodies.push(body);
@@ -150,7 +178,11 @@ function updateStickerBodies() {
 function spawnBall() {
   const x = BALL_RADIUS * 2 + Math.random() * (W - BALL_RADIUS * 4);
   const b = Bodies.circle(x, -BALL_RADIUS * 2, BALL_RADIUS, {
-    restitution: 0.6, friction: 0.05, frictionAir: 0.006, label: 'ball',
+    restitution: 0.6,
+    friction:    0.5,
+    frictionAir: 0.006,
+    label:       'ball',
+    density:     0.002,
   });
   Body.setVelocity(b, { x: (Math.random() - 0.5) * 2, y: 1 });
   World.add(world, b);
@@ -162,8 +194,12 @@ function spawnBall() {
   if (balls.length > 80) World.remove(world, balls.shift());
 }
 
-setInterval(spawnBall, 500);
-setInterval(detectColor, 50);
+function clearBalls() {
+  balls.forEach(b => World.remove(world, b));
+  balls = [];
+}
+
+setInterval(spawnBall, 100);
 Runner.run(Runner.create(), engine);
 
 // ── Panel Toggle ─────────────────────────────
@@ -175,7 +211,6 @@ function togglePanel() {
   toggle.textContent = panel.classList.contains('hidden') ? '❮' : '❯';
 }
 
-
 // ── Webcam ───────────────────────────────────
 async function startWebcam() {
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -183,7 +218,7 @@ async function startWebcam() {
       width:       { ideal: 1280 },
       height:      { ideal: 720  },
       aspectRatio: { ideal: 16/9 },
-      facingMode:  'user'
+      facingMode:  'user',
     }
   });
   video.srcObject = stream;
@@ -191,8 +226,10 @@ async function startWebcam() {
   video.addEventListener('canplay', () => {
     cvCvs.width  = video.videoWidth;
     cvCvs.height = video.videoHeight;
-    initOpenCV();
+    updateCamTransform();
     initWalls();
+    camReady = true;
+    tryStartDetection();
     render();
   });
 }
@@ -202,34 +239,31 @@ function render() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
 
-  // webcam feed (toggleable opacity)
+  // webcam — no mirroring
   if (showWebcam && webcamOpacity > 0) {
-    const scale   = Math.min(W / video.videoWidth, H / video.videoHeight);
-    const offsetX = (W - video.videoWidth  * scale) / 2;
-    const offsetY = (H - video.videoHeight * scale) / 2;
     ctx.save();
     ctx.globalAlpha = webcamOpacity;
-    ctx.translate(W, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, offsetX, offsetY, video.videoWidth * scale, video.videoHeight * scale);
+    ctx.drawImage(video, camOffsetX, camOffsetY,
+      video.videoWidth * camScale, video.videoHeight * camScale);
     ctx.restore();
   }
 
-  // draw sticker boxes — filled grey + white outline
+  // sticker boxes drawn from Matter.js body vertices
+  // so they are 100% in sync with physics
   stickerBodies.forEach(b => {
     const v = b.vertices;
     ctx.beginPath();
     ctx.moveTo(v[0].x, v[0].y);
     for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
     ctx.closePath();
-    ctx.fillStyle   = 'rgba(180, 180, 180, 0.5)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillStyle   = `rgba(180,180,180,${boxOpacity})`;
+    ctx.strokeStyle = `rgba(255,255,255,${boxOpacity})`;
     ctx.lineWidth   = 2;
     ctx.fill();
     ctx.stroke();
   });
 
-  // draw balls
+  // balls
   balls.forEach(ball => {
     const { x, y } = ball.position;
     ctx.beginPath();
@@ -245,6 +279,7 @@ function render() {
 document.addEventListener('fullscreenchange', () => {
   W = mainCvs.width  = window.innerWidth;
   H = mainCvs.height = window.innerHeight;
+  updateCamTransform();
   initWalls();
 });
 

@@ -16,28 +16,24 @@ html, body {
   display: block;
 }
 
-/* ── Side Panel ── */
 #panel {
   position: fixed;
   top: 0; right: 0;
   width: 220px;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0,0,0,0.85);
   border-left: 1px solid rgba(255,255,255,0.1);
   padding: 24px 16px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   z-index: 100;
   overflow-y: auto;
   transition: transform 0.3s ease;
 }
 
-#panel.hidden {
-  transform: translateX(100%);
-}
+#panel.hidden { transform: translateX(100%); }
 
-/* ── Toggle Arrow ── */
 #panel-toggle {
   position: fixed;
   top: 50%;
@@ -47,8 +43,7 @@ html, body {
   border: 1px solid rgba(255,255,255,0.15);
   border-right: none;
   color: rgba(255,255,255,0.6);
-  width: 24px;
-  height: 48px;
+  width: 24px; height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,17 +51,16 @@ html, body {
   z-index: 101;
   border-radius: 6px 0 0 6px;
   font-size: 12px;
-  transition: right 0.3s ease, color 0.15s;
+  transition: right 0.3s ease;
 }
 
-#panel-toggle:hover { color: #fff; }
 #panel-toggle.hidden { right: 0; }
+#panel-toggle:hover { color: #fff; }
 
-/* ── Panel Contents ── */
 .panel-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .section-title {
@@ -83,10 +77,7 @@ label {
   margin-top: 4px;
 }
 
-input[type=range] {
-  width: 100%;
-  accent-color: #fff;
-}
+input[type=range] { width: 100%; accent-color: #fff; }
 
 span {
   font-size: 10px;
