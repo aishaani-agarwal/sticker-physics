@@ -4,22 +4,23 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
+  width: 100%;
+  height: 100%;
   background: #000;
   overflow: hidden;
 }
 
-/* webcam + opencv canvas are hidden, just processing tools */
 #video,
 #cv-canvas {
   display: none;
 }
 
-/* main canvas fills the whole screen */
 #main-canvas {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  display: block;
 }
